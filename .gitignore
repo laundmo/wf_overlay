@@ -1,0 +1,6 @@
+/target
+**.rten
+*/ocr_stacked.rs
+/assets/**/*.png
+.cargo/config.toml
+*.json
