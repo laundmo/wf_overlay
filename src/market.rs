@@ -65,7 +65,7 @@ fn setup(mut commands: Commands) {
                     .filter(|i| i.tags.contains(&"prime".to_string()))
                     .for_each(|i| {
                         engine.insert(i.slug.clone(), &i.i18n.en.name);
-                        data.insert_unknown(i.slug.clone());
+                        data.insert_unknown(i.slug.clone(), i.ducats);
                     });
                 commands.spawn(ItemSearchIndex(engine));
             },
@@ -107,10 +107,14 @@ fn fetch_items(
 ) {
     let slug = query.get(e.entity).unwrap().0.clone();
     // if cache is good, insert that and off we go!
-    if let Some(data) = data.get_if_fresh(slug.clone()) {
-        commands.entity(e.entity).insert(data.clone());
+    if let Some(data) = data.get_if_fresh(&slug) {
+        commands
+            .entity(e.entity)
+            .remove::<WantsFetch>()
+            .insert((data.clone(), SkipStore));
         return;
     };
+    let ducats = data.get_ducats(&slug);
     info!("Starting fetch for Item: {slug}");
     commands
         .entity(e.entity)
@@ -140,6 +144,7 @@ fn fetch_items(
                         avg,
                         min,
                         max,
+                        ducats,
                     },));
             },
         );
@@ -156,6 +161,7 @@ fn unix_now() -> u64 {
 #[derive(Component, Clone, Debug, Serialize, Deserialize)]
 pub struct ItemData {
     last_fetch: u64,
+    pub ducats: Option<u32>,
     #[serde(deserialize_with = "deserialize_null_as_nan")]
     pub max: f32,
     #[serde(deserialize_with = "deserialize_null_as_nan")]
@@ -171,7 +177,7 @@ fn deserialize_null_as_nan<'de, D: Deserializer<'de>>(des: D) -> Result<f32, D::
 #[derive(
     Component, Clone, Debug, PartialEq, PartialOrd, Ord, Eq, Serialize, Deserialize, Deref, DerefMut,
 )]
-struct Slug(String);
+pub struct Slug(pub String);
 
 #[derive(Debug, Resource, Serialize, Deserialize, Default)]
 struct DataManager {
@@ -190,7 +196,7 @@ impl DataManager {
         self.ordered.insert(last_fetch, k);
     }
 
-    fn insert_unknown(&mut self, k: String) {
+    fn insert_unknown(&mut self, k: String, ducats: Option<u32>) {
         if self.map.contains_key(&k) {
             return;
         }
@@ -207,6 +213,7 @@ impl DataManager {
                 max: f32::NAN,
                 min: f32::NAN,
                 avg: f32::NAN,
+                ducats,
             },
         );
 
@@ -217,8 +224,12 @@ impl DataManager {
         self.ordered.first_key_value()
     }
 
-    fn get_if_fresh(&self, k: String) -> Option<&ItemData> {
-        let data = self.map.get(&k)?;
+    fn get_ducats(&self, k: &String) -> Option<u32> {
+        self.map.get(k).and_then(|i| i.ducats)
+    }
+
+    fn get_if_fresh(&self, k: &String) -> Option<&ItemData> {
+        let data = self.map.get(k)?;
         if data.last_fetch + MAX_AGE < unix_now() {
             None
         } else {
@@ -264,17 +275,21 @@ fn fetch_oldest(data: Res<DataManager>, mut commands: Commands, q: Query<&WantsF
     }
 }
 
+#[derive(Component)]
+struct SkipStore;
+
 fn insert_new_into_storage(
     evt: On<Insert, ItemData>,
-    q: Query<(Entity, &Slug, &ItemData, Has<RemoveOnStore>)>,
+    q: Query<(Entity, &Slug, &ItemData, Has<RemoveOnStore>), Without<SkipStore>>,
     mut data: ResMut<DataManager>,
     mut commands: Commands,
 ) {
-    let (e, slug, item_data, remove_on_store) = q.get(evt.entity).unwrap();
-    info!("Got new data for {slug:?}: {item_data:?}");
-    data.insert(slug.0.clone(), item_data.clone());
-    if remove_on_store {
-        commands.entity(e).try_despawn();
-    }
-    data.save_to_disk();
+    if let Ok((e, slug, item_data, remove_on_store)) = q.get(evt.entity) {
+        info!("Got new data for {slug:?}: {item_data:?}");
+        data.insert(slug.0.clone(), item_data.clone());
+        if remove_on_store {
+            commands.entity(e).try_despawn();
+        }
+        data.save_to_disk();
+    };
 }

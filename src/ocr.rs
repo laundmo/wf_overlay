@@ -1,31 +1,17 @@
 use std::{
-    hint::black_box,
     ops::Range,
     path::PathBuf,
-    result,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
 use anyhow::anyhow;
 use bevy::{
-    camera::primitives::Aabb,
-    ecs::system::QueryLens,
-    gizmos::{self, aabb::AabbGizmoPlugin},
-    math::{
-        VectorSpace,
-        bounding::{Aabb2d, BoundingVolume},
-    },
+    math::bounding::{Aabb2d, BoundingVolume},
     prelude::*,
-    sprite::{Anchor, Text2dShadow},
-    tasks::{
-        AsyncComputeTaskPool, Task, block_on,
-        futures_lite::{FutureExt, future},
-    },
+    tasks::{AsyncComputeTaskPool, Task, block_on, futures_lite::future},
 };
-use fast_image_resize::{ResizeOptions, Resizer};
-use image::{DynamicImage, ImageBuffer, Rgb, RgbImage, RgbaImage};
-use ocrs::{ImageSource, OcrEngine, OcrEngineParams, TextItem, TextLine};
+use ocrs::{ImageSource, OcrEngine, OcrEngineParams, TextItem};
 use rten::Model;
 
 use crate::{ShouldDisplay, cap::LatestImage};
@@ -53,7 +39,7 @@ fn setup_items_container(mut commands: Commands) {
     ));
 }
 #[derive(Resource, Clone)]
-struct Engine(Arc<Mutex<OcrEngine>>, Arc<Mutex<Resizer>>);
+struct Engine(Arc<Mutex<OcrEngine>>);
 
 impl Default for Engine {
     fn default() -> Self {
@@ -69,10 +55,7 @@ impl Default for Engine {
             ..Default::default()
         })
         .unwrap();
-        Self(
-            Arc::new(Mutex::new(engine)),
-            Arc::new(Mutex::new(Resizer::new())),
-        )
+        Self(Arc::new(Mutex::new(engine)))
     }
 }
 
@@ -270,7 +253,7 @@ fn start_ocr_task(
     mut items: Single<&mut ItemsContainer>,
 ) {
     if current_task.0.is_none()
-        && let Some(img) = img.0.take()
+        && let Some(img) = img.get_latest_rgba()
     {
         let engine = engine.clone();
         current_task.0 = Some(AsyncComputeTaskPool::get().spawn(async move {
@@ -309,7 +292,7 @@ fn get_ocr_result(
                     break;
                 }
                 let center = item.bounds.center().extend(0.);
-                let text = item.name.clone();
+                // let text = item.name.clone();
                 c.spawn((
                     item,
                     ShouldDisplay,

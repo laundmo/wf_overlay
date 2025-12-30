@@ -2,11 +2,12 @@
 
 use bevy::{
     prelude::*,
+    sprite::{Anchor, Text2dShadow},
     window::{CompositeAlphaMode, WindowMode, WindowResolution},
 };
 
 use crate::{
-    market::ItemData,
+    market::{ItemData, Slug},
     ocr::{ItemsContainer, StartOcr},
 };
 
@@ -41,7 +42,7 @@ fn main() {
             },
         ))
         .add_plugins(ocr::ocrs_plugin)
-        .add_plugins(cap::waycap_plugin)
+        .add_plugins(cap::ScreencastPlugin)
         .add_plugins(market::market_plugin)
         .add_plugins(input::input_plugin)
         // .add_plugins(rag::rustautogui_plugin)
@@ -68,16 +69,28 @@ pub struct ShouldDisplay;
 
 fn display_plat(
     evt: On<Insert, ItemData>,
-    q: Query<&ItemData, With<ShouldDisplay>>,
+    q: Query<(&ItemData, &Slug), With<ShouldDisplay>>,
     mut commands: Commands,
 ) {
-    if let Ok(data) = q.get(evt.entity) {
+    if let Ok((data, slug)) = q.get(evt.entity) {
         commands.entity(evt.entity).with_child((
-            Transform::from_xyz(130., -35., 0.),
+            Transform::from_xyz(150., -10., 0.),
             Text2d(format!(
-                "avg: {}\nmin: {}\nmax: {}",
-                data.avg, data.min, data.max
+                "Avg: {}\nMin: {}\nMax: {}\nDucats: {}\n{}",
+                data.avg,
+                data.min,
+                data.max,
+                data.ducats
+                    .as_ref()
+                    .map_or("-".to_string(), ToString::to_string),
+                slug.0
             )),
+            TextFont::from_font_size(24.),
+            Anchor::TOP_CENTER,
+            Text2dShadow {
+                offset: Vec2::new(2.0, -2.0),
+                color: Color::BLACK,
+            },
         ));
     }
 }

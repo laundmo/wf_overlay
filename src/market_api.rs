@@ -13,11 +13,12 @@ pub(crate) struct I18n1 {
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct MarketItem {
     #[serde(rename = "gameRef")]
-    pub gameRef: String,
+    pub game_ref: String,
     pub i18n: I18n1,
     pub id: String,
     pub slug: String,
     pub tags: Vec<String>,
+    pub ducats: Option<u32>,
 }
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct ItemsRoot {
