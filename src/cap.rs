@@ -8,14 +8,17 @@ use crossbeam_channel::{Receiver, Sender, bounded};
 use image::RgbaImage;
 use pipewire as pw;
 use pw::{properties::properties, spa};
-use std::os::fd::{IntoRawFd, OwnedFd};
+use std::{
+    fs,
+    os::fd::{IntoRawFd, OwnedFd},
+};
 
 /// Plugin for capturing screencast on Linux/Wayland
 pub struct ScreencastPlugin;
 
 impl Plugin for ScreencastPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ScreencastSession>()
+        app.insert_resource(ScreencastSession::from_disk_or_default())
             .init_resource::<LatestImage>()
             .add_systems(Startup, setup_screencast)
             .add_systems(Update, receive_frames);
@@ -63,8 +66,25 @@ pub enum VideoFormat {
 pub struct ScreencastSession {
     /// Session token for restoring the session
     pub restore_token: Option<String>,
-    /// Whether the session is active
-    pub is_active: bool,
+}
+impl ScreencastSession {
+    const FILE: &'static str = "screen_session.txt";
+    fn from_disk_or_default() -> Self {
+        if let Ok(s) = fs::read_to_string(Self::FILE) {
+            Self {
+                restore_token: Some(s),
+            }
+        } else {
+            Self {
+                restore_token: None,
+            }
+        }
+    }
+    fn save_to_disk(&self) {
+        if let Some(ref token) = self.restore_token {
+            fs::write(Self::FILE, token).unwrap();
+        }
+    }
 }
 
 /// Setup the screencast session
@@ -88,9 +108,13 @@ fn setup_screencast(session_res: Res<ScreencastSession>, mut commands: Commands)
     let task_pool = AsyncComputeTaskPool::get();
     task_pool
         .spawn(async move {
-            let (stream, fd) = open_portal(restore_token)
+            let (stream, fd, new_token) = open_portal(restore_token)
                 .await
                 .expect("failed to open portal");
+            let s = ScreencastSession {
+                restore_token: new_token,
+            };
+            s.save_to_disk();
             let pipewire_node_id = stream.pipe_wire_node_id();
 
             println!(
@@ -106,7 +130,9 @@ fn setup_screencast(session_res: Res<ScreencastSession>, mut commands: Commands)
         .detach();
 }
 
-async fn open_portal(restore_token: Option<String>) -> ashpd::Result<(Stream, OwnedFd)> {
+async fn open_portal(
+    restore_token: Option<String>,
+) -> ashpd::Result<(Stream, OwnedFd, Option<String>)> {
     let proxy = Screencast::new().await?;
     let session = proxy.create_session().await?;
     proxy
@@ -116,7 +142,7 @@ async fn open_portal(restore_token: Option<String>) -> ashpd::Result<(Stream, Ow
             SourceType::Monitor.into(),
             false,
             restore_token.as_deref(),
-            PersistMode::DoNot,
+            PersistMode::ExplicitlyRevoked,
         )
         .await?;
 
@@ -126,10 +152,11 @@ async fn open_portal(restore_token: Option<String>) -> ashpd::Result<(Stream, Ow
         .first()
         .expect("no stream found / selected")
         .to_owned();
+    let restore_token = response.restore_token().map(ToString::to_string);
 
     let fd = proxy.open_pipe_wire_remote(&session).await?;
 
-    Ok((stream, fd))
+    Ok((stream, fd, restore_token))
 }
 
 struct UserData {
