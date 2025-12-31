@@ -292,24 +292,12 @@ fn get_ocr_result(
                     break;
                 }
                 let center = item.bounds.center().extend(0.);
-                // let text = item.name.clone();
                 c.spawn((
                     item,
                     ShouldDisplay,
                     Visibility::Inherited,
                     Transform::from_xyz(center.x, result.detect_aabb.max.y, 0.0),
-                ))
-                // .with_child((
-                //     Text2d(text),
-                //     TextFont::from_font_size(24.),
-                //     Text2dShadow {
-                //         offset: Vec2::new(2.0, -2.0),
-                //         color: Color::BLACK,
-                //     },
-                //     Anchor::TOP_CENTER,
-                //     Transform::from_xyz(0., -10., 0.),
-                // ))
-                ;
+                ));
             }
         });
         current_task.0 = None;

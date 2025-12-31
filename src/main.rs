@@ -47,7 +47,7 @@ fn main() {
         .add_plugins(input::input_plugin)
         // .add_plugins(rag::rustautogui_plugin)
         .add_systems(Startup, setup)
-        .add_systems(Update, keybinds)
+        .add_systems(Update, (keybinds, despawn_timer))
         .add_observer(display_plat)
         .run();
 }
@@ -56,11 +56,41 @@ fn setup(mut commands: Commands) {
     commands.spawn(Camera2d);
 }
 
-fn keybinds(kb: Res<ButtonInput<KeyCode>>, mut commands: Commands) {
+fn keybinds(
+    kb: Res<ButtonInput<KeyCode>>,
+    mut commands: Commands,
+    items: Single<Entity, With<ItemsContainer>>,
+) {
     // see input.rs for why KeyI works but nothing else will
     if kb.just_pressed(KeyCode::KeyI) {
         println!("Start capture");
         commands.trigger(StartOcr);
+        commands
+            .entity(items.entity())
+            .insert_if_new(DespawnChildrenAfter::new(14.5));
+    }
+}
+
+#[derive(Component, Deref, DerefMut)]
+pub struct DespawnChildrenAfter(Timer);
+impl DespawnChildrenAfter {
+    pub fn new(seconds: f32) -> Self {
+        Self(Timer::from_seconds(seconds, TimerMode::Once))
+    }
+}
+
+fn despawn_timer(
+    q: Query<(Entity, &mut DespawnChildrenAfter)>,
+    time: Res<Time>,
+    mut commands: Commands,
+) {
+    for (e, mut t) in q {
+        if t.tick(time.delta()).just_finished() {
+            commands
+                .entity(e)
+                .despawn_children()
+                .remove::<DespawnChildrenAfter>();
+        }
     }
 }
 
