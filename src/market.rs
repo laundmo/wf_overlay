@@ -21,6 +21,11 @@ const MAX_ITEMS_ESTIMATE: u64 = 1000;
 const MAX_AGE: u64 = BACKGROUND_FETCH_DELAY * MAX_ITEMS_ESTIMATE * 3;
 
 pub fn market_plugin(app: &mut App) {
+    let mut req_plugin = ReqPlugin {
+        requests_per_second: 3.0,
+        ..default()
+    };
+    req_plugin.config_builder = req_plugin.config_builder.timeout_global(None);
     app.add_plugins(ReqPlugin {
         requests_per_second: 3.0,
         ..default()
