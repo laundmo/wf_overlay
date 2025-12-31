@@ -17,7 +17,7 @@ rten = "0.24"
 rten-tensor = "0.24"
 serde = { version = "1.0.228", default-features = false }
 simsearch = "0.3.0"
-bevy_mod_req = { git = "https://codeberg.org/laund/bevy_mod_req.git", features = [
+bevy_mod_req = { version = "0.1.1", git = "https://codeberg.org/laund/bevy_mod_req.git", features = [
     "ratelimit",
 ] }
 serde_json_any_key = "2.0.0"
