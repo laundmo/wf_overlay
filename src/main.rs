@@ -1,15 +1,24 @@
 #![allow(clippy::type_complexity)]
 
+use std::{sync::Arc, time::Duration};
+
 use bevy::{
+    ecs::world::CommandQueue,
     prelude::*,
+    render::{Render, RenderApp},
     sprite::{Anchor, Text2dShadow},
-    window::{CompositeAlphaMode, WindowMode, WindowResolution},
+    state::state::FreelyMutableState,
+    window::{
+        ClosingWindow, CompositeAlphaMode, CursorOptions, PrimaryWindow, RawHandleWrapperHolder,
+        WindowMode, WindowResolution,
+    },
 };
 
 use crate::{
     market::{ItemData, Slug},
     ocr::{ItemsContainer, StartOcr},
 };
+use bevy::dev_tools::states::log_transitions;
 
 mod cap;
 mod input;
@@ -20,34 +29,32 @@ mod ocr;
 fn main() {
     App::new()
         .insert_resource(ClearColor(Color::NONE))
-        .add_plugins(DefaultPlugins.set(
-            // set window name for the KDE window rule (or your own)
-            WindowPlugin {
-                primary_window: Some(Window {
-                    //name: "bevy.app".to_string().into(),
-                    mode: WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
-                    transparent: true,
-                    composite_alpha_mode: CompositeAlphaMode::PreMultiplied,
-                    decorations: false,
-                    window_level: bevy::window::WindowLevel::AlwaysOnTop,
-                    name: Some("wf_overlay".to_string()),
-                    resolution: WindowResolution::default().with_scale_factor_override(1.0),
-                    ..default()
-                }),
-                primary_cursor_options: Some(bevy::window::CursorOptions {
-                    hit_test: false,
-                    ..default()
-                }),
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                name: Some("wf_overlay".to_string()),
+                mode: WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
+                transparent: true,
+                composite_alpha_mode: CompositeAlphaMode::PreMultiplied,
+                decorations: false,
+                window_level: bevy::window::WindowLevel::AlwaysOnTop,
+                resolution: WindowResolution::default().with_scale_factor_override(1.0),
                 ..default()
-            },
-        ))
+            }),
+            primary_cursor_options: Some(CursorOptions {
+                hit_test: false,
+                ..default()
+            }),
+            exit_condition: bevy::window::ExitCondition::DontExit,
+            ..default()
+        }))
         .add_plugins(ocr::ocrs_plugin)
         .add_plugins(cap::ScreencastPlugin)
         .add_plugins(market::market_plugin)
         .add_plugins(input::input_plugin)
-        // .add_plugins(rag::rustautogui_plugin)
+        .init_state::<AppState>()
+        .add_sub_state::<PlatOverlayPhase>()
         .add_systems(Startup, setup)
-        .add_systems(Update, (keybinds, despawn_timer))
+        .add_systems(Update, (keybinds, command_after))
         .add_observer(display_plat)
         .run();
 }
@@ -56,7 +63,7 @@ fn setup(mut commands: Commands) {
     commands.spawn(Camera2d);
     let border = Val::VMax(0.1);
     let size = Val::VMax(5.);
-    commands
+    let rulers = commands
         .spawn((
             Node {
                 position_type: PositionType::Relative,
@@ -64,7 +71,6 @@ fn setup(mut commands: Commands) {
                 height: Val::Vh(100.),
                 ..default()
             },
-            DespawnChildrenAfter::new(20.),
             Visibility::Inherited,
         ))
         .with_children(|c| {
@@ -128,43 +134,84 @@ fn setup(mut commands: Commands) {
                     color: Color::WHITE,
                 },
             ));
-        });
+        })
+        .id();
+    commands.delayed(Duration::from_secs(5), move |mut c| {
+        c.entity(rulers).despawn();
+    });
 }
 
-fn keybinds(
-    kb: Res<ButtonInput<KeyCode>>,
-    mut commands: Commands,
-    items: Single<Entity, With<ItemsContainer>>,
-) {
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
+pub enum AppState {
+    #[default]
+    Waiting,
+    PlatOverlay,
+    EditOverlay,
+}
+#[derive(SubStates, Clone, PartialEq, Eq, Hash, Debug, Default)]
+#[source(AppState = AppState::PlatOverlay)]
+pub enum PlatOverlayPhase {
+    #[default]
+    Ocr,
+    Displaying,
+}
+
+fn keybinds(kb: Res<ButtonInput<KeyCode>>, mut commands: Commands) {
     // see input.rs for why KeyI works but nothing else will
     if kb.just_pressed(KeyCode::KeyI) {
         println!("Start capture");
-        commands.trigger(StartOcr);
-        commands
-            .entity(items.entity())
-            .insert_if_new(DespawnChildrenAfter::new(14.5));
+        commands.set_state(AppState::PlatOverlay);
+        commands.set_state(PlatOverlayPhase::Ocr);
     }
 }
 
-#[derive(Component, Deref, DerefMut)]
-pub struct DespawnChildrenAfter(Timer);
-impl DespawnChildrenAfter {
-    pub fn new(seconds: f32) -> Self {
-        Self(Timer::from_seconds(seconds, TimerMode::Once))
+struct DelayedCommands<C: FnOnce(Commands) + Send + Sync + 'static> {
+    delay: Duration,
+    write_commands: C,
+}
+trait DelayedCommandsExt {
+    fn delayed(
+        &mut self,
+        delay: Duration,
+        write_commands: impl FnOnce(Commands) + Send + Sync + 'static,
+    );
+}
+impl DelayedCommandsExt for Commands<'_, '_> {
+    fn delayed(
+        &mut self,
+        delay: Duration,
+        write_commands: impl FnOnce(Commands) + Send + Sync + 'static,
+    ) {
+        self.queue(DelayedCommands {
+            delay,
+            write_commands,
+        });
+    }
+}
+impl<C: FnOnce(Commands) + Send + Sync + 'static> Command for DelayedCommands<C> {
+    fn apply(self, world: &mut World) {
+        let mut command_queue = CommandQueue::default();
+        (self.write_commands)(Commands::new(&mut command_queue, world));
+        world.spawn(DelayedCommandQueue(
+            Timer::new(self.delay, TimerMode::Once),
+            command_queue,
+        ));
+        println!("spawned delayed command queue");
     }
 }
 
-fn despawn_timer(
-    q: Query<(Entity, &mut DespawnChildrenAfter)>,
+#[derive(Component)]
+struct DelayedCommandQueue(Timer, CommandQueue);
+
+fn command_after(
+    cmds: Query<(Entity, &mut DelayedCommandQueue)>,
     time: Res<Time>,
     mut commands: Commands,
 ) {
-    for (e, mut t) in q {
-        if t.tick(time.delta()).just_finished() {
-            commands
-                .entity(e)
-                .despawn_children()
-                .remove::<DespawnChildrenAfter>();
+    for (e, mut cmd) in cmds {
+        if cmd.0.tick(time.delta()).just_finished() {
+            commands.append(&mut cmd.1);
+            commands.entity(e).despawn();
         }
     }
 }
@@ -175,8 +222,18 @@ pub struct ShouldDisplay;
 fn display_plat(
     evt: On<Insert, ItemData>,
     q: Query<(&ItemData, &Slug), With<ShouldDisplay>>,
+    main_state: Res<State<AppState>>,
+    maybe_state: Option<Res<State<PlatOverlayPhase>>>,
     mut commands: Commands,
 ) {
+    if let Some(state) = maybe_state
+        && let PlatOverlayPhase::Ocr = state.get()
+    {
+        commands.set_state(PlatOverlayPhase::Displaying);
+        commands.delayed(Duration::from_secs_f32(14.5), |mut c| {
+            c.set_state(AppState::Waiting)
+        });
+    }
     if let Ok((data, slug)) = q.get(evt.entity) {
         commands.entity(evt.entity).with_child((
             Transform::from_xyz(150., -10., 0.),
@@ -196,6 +253,7 @@ fn display_plat(
                 offset: Vec2::new(2.0, -2.0),
                 color: Color::BLACK,
             },
+            DespawnOnExit(PlatOverlayPhase::Displaying),
         ));
     }
 }

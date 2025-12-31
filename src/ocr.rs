@@ -14,7 +14,7 @@ use bevy::{
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams, TextItem};
 use rten::Model;
 
-use crate::{ShouldDisplay, cap::LatestImage};
+use crate::{PlatOverlayPhase, ShouldDisplay, cap::LatestImage};
 
 fn file_path(path: &str) -> PathBuf {
     let mut abs_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -25,9 +25,14 @@ fn file_path(path: &str) -> PathBuf {
 pub(crate) fn ocrs_plugin(app: &mut App) {
     app.init_resource::<Engine>()
         .init_resource::<OcrTask>()
-        .add_observer(start_ocr_task)
+        .add_systems(OnEnter(PlatOverlayPhase::Ocr), start_ocr_task)
         .add_systems(Startup, setup_items_container)
-        .add_systems(Update, (get_ocr_result, debug_ocr_result).chain());
+        .add_systems(
+            Update,
+            (get_ocr_result, debug_ocr_result)
+                .chain()
+                .run_if(in_state(PlatOverlayPhase::Ocr)),
+        );
 }
 fn setup_items_container(mut commands: Commands) {
     commands.spawn(ItemsContainer(
@@ -246,7 +251,6 @@ pub struct StartOcr;
 struct OcrTask(Option<Task<Result<OcrResults>>>);
 
 fn start_ocr_task(
-    e: On<StartOcr>,
     mut img: ResMut<LatestImage>,
     engine: Res<Engine>,
     mut current_task: ResMut<OcrTask>,

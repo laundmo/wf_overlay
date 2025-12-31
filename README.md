@@ -8,6 +8,7 @@ Only tested on a 4k monitor, very possible it won't work on other resolutions (t
 
 1. Run this in `assets/` to download OCR models: [download_models.sh](https://github.com/robertknight/ocrs/blob/4d76906598bfb4f539fd12d554c9c402dfa78be3/ocrs/examples/download-models.sh)
 2. Make sure your user is in the `input` group.
+    1. For most distros, run `sudo usermod -a -G input $USER` and then reboot
 3. (Compile and) run wf_overlay
 4. Select main screen in the Desktop Portal
 5. Go ingame
