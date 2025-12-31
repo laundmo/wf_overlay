@@ -54,6 +54,81 @@ fn main() {
 
 fn setup(mut commands: Commands) {
     commands.spawn(Camera2d);
+    let border = Val::VMax(0.1);
+    let size = Val::VMax(5.);
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Relative,
+                width: Val::Vw(100.),
+                height: Val::Vh(100.),
+                ..default()
+            },
+            DespawnChildrenAfter::new(20.),
+            Visibility::Inherited,
+        ))
+        .with_children(|c| {
+            c.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    bottom: border,
+                    right: border,
+                    width: size,
+                    height: size,
+                    ..default()
+                },
+                Outline {
+                    width: border,
+                    offset: Val::ZERO,
+                    color: Color::WHITE,
+                },
+            ));
+            c.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    bottom: border,
+                    left: border,
+                    width: size,
+                    height: size,
+                    ..default()
+                },
+                Outline {
+                    width: border,
+                    offset: Val::ZERO,
+                    color: Color::WHITE,
+                },
+            ));
+            c.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: border,
+                    right: border,
+                    width: size,
+                    height: size,
+                    ..default()
+                },
+                Outline {
+                    width: border,
+                    offset: Val::ZERO,
+                    color: Color::WHITE,
+                },
+            ));
+            c.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: border,
+                    left: border,
+                    width: size,
+                    height: size,
+                    ..default()
+                },
+                Outline {
+                    width: border,
+                    offset: Val::ZERO,
+                    color: Color::WHITE,
+                },
+            ));
+        });
 }
 
 fn keybinds(
