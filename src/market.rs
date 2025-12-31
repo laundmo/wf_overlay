@@ -26,7 +26,7 @@ pub fn market_plugin(app: &mut App) {
         requests_per_second: 3.0,
         make_config: |c| {
             c.ip_family(IpFamily::Ipv4Only)
-                .timeout_global(None)
+                .timeout_global(Some(Duration::from_secs(8)))
                 .user_agent(format!(
                     "{} {} from: {}",
                     env!("CARGO_PKG_NAME"),
