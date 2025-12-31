@@ -26,22 +26,19 @@ pub fn market_plugin(app: &mut App) {
         ..default()
     };
     req_plugin.config_builder = req_plugin.config_builder.timeout_global(None);
-    app.add_plugins(ReqPlugin {
-        requests_per_second: 3.0,
-        ..default()
-    })
-    .add_plugins(req_type_plugin::<ItemsRoot>)
-    .add_plugins(req_type_plugin::<TopOrdersRoot>)
-    .insert_resource(DataManager::restore_from_disk_or_empty())
-    .add_systems(Startup, setup)
-    .add_systems(Update, resolve_items)
-    .add_systems(
-        Update,
-        fetch_oldest.run_if(on_real_timer(Duration::from_secs_f32(8.0))),
-    )
-    .add_observer(fetch_items)
-    .add_observer(insert_new_into_storage)
-    .add_observer(|e: On<ReqError>| error!("Request error: {:?}", e.err));
+    app.add_plugins(req_plugin)
+        .add_plugins(req_type_plugin::<ItemsRoot>)
+        .add_plugins(req_type_plugin::<TopOrdersRoot>)
+        .insert_resource(DataManager::restore_from_disk_or_empty())
+        .add_systems(Startup, setup)
+        .add_systems(Update, resolve_items)
+        .add_systems(
+            Update,
+            fetch_oldest.run_if(on_real_timer(Duration::from_secs_f32(8.0))),
+        )
+        .add_observer(fetch_items)
+        .add_observer(insert_new_into_storage)
+        .add_observer(|e: On<ReqError>| error!("Request error: {:?}", e.err));
 }
 
 #[derive(Component)]
