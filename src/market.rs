@@ -6,7 +6,7 @@ use std::{
 };
 
 use bevy::{platform::collections::HashMap, prelude::*, time::common_conditions::on_real_timer};
-use bevy_mod_req::{ReqPlugin, ReqRequest, ReqResponse, req_type_plugin};
+use bevy_mod_req::{ReqError, ReqPlugin, ReqRequest, ReqResponse, req_type_plugin};
 use serde::{Deserialize, Deserializer, Serialize};
 use simsearch::{SearchOptions, SimSearch};
 
@@ -35,7 +35,8 @@ pub fn market_plugin(app: &mut App) {
         fetch_oldest.run_if(on_real_timer(Duration::from_secs_f32(8.0))),
     )
     .add_observer(fetch_items)
-    .add_observer(insert_new_into_storage);
+    .add_observer(insert_new_into_storage)
+    .add_observer(|e: On<ReqError>| error!("Request error: {:?}", e.err));
 }
 
 #[derive(Component)]
