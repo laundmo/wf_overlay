@@ -9,6 +9,7 @@ use bevy::{platform::collections::HashMap, prelude::*, time::common_conditions::
 use bevy_mod_req::{ReqError, ReqPlugin, ReqRequest, ReqResponse, req_type_plugin};
 use serde::{Deserialize, Deserializer, Serialize};
 use simsearch::{SearchOptions, SimSearch};
+use ureq::config::IpFamily;
 
 use crate::{
     market_api::{ItemsRoot, TopOrdersRoot},
@@ -24,12 +25,14 @@ pub fn market_plugin(app: &mut App) {
     let req_plugin = ReqPlugin {
         requests_per_second: 3.0,
         make_config: |c| {
-            c.timeout_global(None).user_agent(format!(
-                "{} {} from: {}",
-                env!("CARGO_PKG_NAME"),
-                env!("CARGO_PKG_VERSION"),
-                env!("CARGO_PKG_REPOSITORY")
-            ))
+            c.ip_family(IpFamily::Ipv4Only)
+                .timeout_global(None)
+                .user_agent(format!(
+                    "{} {} from: {}",
+                    env!("CARGO_PKG_NAME"),
+                    env!("CARGO_PKG_VERSION"),
+                    env!("CARGO_PKG_REPOSITORY")
+                ))
         },
     };
     app.add_plugins(req_plugin)
