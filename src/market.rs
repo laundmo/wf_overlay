@@ -23,7 +23,14 @@ const MAX_AGE: u64 = BACKGROUND_FETCH_DELAY * MAX_ITEMS_ESTIMATE * 3;
 pub fn market_plugin(app: &mut App) {
     let req_plugin = ReqPlugin {
         requests_per_second: 3.0,
-        make_config: |c| c.timeout_global(None),
+        make_config: |c| {
+            c.timeout_global(None).user_agent(format!(
+                "{} {} from: {}",
+                env!("CARGO_PKG_NAME"),
+                env!("CARGO_PKG_VERSION"),
+                env!("CARGO_PKG_REPOSITORY")
+            ))
+        },
     };
     app.add_plugins(req_plugin)
         .add_plugins(req_type_plugin::<ItemsRoot>)
