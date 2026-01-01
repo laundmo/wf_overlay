@@ -1,0 +1,32 @@
+# Config for wf_overlay
+
+# currently a no-op, does nothing
+overlay = true
+
+# raw inputs, before layout. approx US-layout. ex.: KeyA, KeyB, Delete, AltLeft
+overlay_key = "KeyI"
+
+# Delay for closing the overlay, in seconds
+close_layout_after = 14.5
+
+# after how much time to refresh the market data, in seconds. Defaults to 2 days.
+refresh_market_after = 172800
+
+# show boxes in the corner for this many seconds on start to help with alignment
+show_corner_boxes = 5.0
+
+# main font size for the overlay
+font_size = 18.0
+
+[[layouts]]
+# aspect ratio to which this applies
+aspect_ratio = "16:9"
+# pixels which need to match for this layout to apply
+# currently untested and will probably change
+pixel_checks = []
+# position, as offset from the top-left corner (0,0) in pixels
+offset = [478, 411]
+# size of the box in pixels
+size = [965, 49]
+# resolution at which the above values apply
+reference_resolution = [1920, 1080]

@@ -23,7 +23,7 @@ const MAX_AGE: u64 = BACKGROUND_FETCH_DELAY * MAX_ITEMS_ESTIMATE * 3;
 
 pub fn market_plugin(app: &mut App) {
     let req_plugin = ReqPlugin {
-        requests_per_second: 3.0,
+        requests_per_second: 4.0,
         make_config: |c| {
             c.ip_family(IpFamily::Ipv4Only)
                 .timeout_global(Some(Duration::from_secs(8)))
@@ -43,7 +43,7 @@ pub fn market_plugin(app: &mut App) {
         .add_systems(Update, resolve_items)
         .add_systems(
             Update,
-            fetch_oldest.run_if(on_real_timer(Duration::from_secs_f32(8.0))),
+            fetch_oldest.run_if(on_real_timer(Duration::from_secs_f32(6.0))),
         )
         .add_observer(fetch_items)
         .add_observer(insert_new_into_storage)
@@ -259,14 +259,12 @@ impl DataManager {
     fn restore_from_disk_or_empty() -> Self {
         if let Ok(file) = File::open("result.json") {
             let mut reader = BufReader::new(file);
-            dbg!("file!");
             if let Ok(mut m) = serde_json::from_reader::<_, Self>(&mut reader) {
                 m.ordered = m
                     .map
                     .iter()
                     .map(|i| (i.1.last_fetch, i.0.clone()))
                     .collect();
-                dbg!(&m);
                 return m;
             }
         }

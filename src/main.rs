@@ -1,26 +1,23 @@
 #![allow(clippy::type_complexity)]
 
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 use bevy::{
     ecs::world::CommandQueue,
+    math::bounding::BoundingVolume,
     prelude::*,
-    render::{Render, RenderApp},
     sprite::{Anchor, Text2dShadow},
-    state::state::FreelyMutableState,
-    window::{
-        ClosingWindow, CompositeAlphaMode, CursorOptions, PrimaryWindow, RawHandleWrapperHolder,
-        WindowMode, WindowResolution,
-    },
+    window::{CompositeAlphaMode, CursorOptions, WindowMode, WindowResolution},
 };
 
 use crate::{
+    config::ConfigManager,
     market::{ItemData, Slug},
-    ocr::{ItemsContainer, StartOcr},
+    ocr::ItemsContainer,
 };
-use bevy::dev_tools::states::log_transitions;
 
 mod cap;
+mod config;
 mod input;
 mod market;
 mod market_api;
@@ -44,13 +41,13 @@ fn main() {
                 hit_test: false,
                 ..default()
             }),
-            exit_condition: bevy::window::ExitCondition::DontExit,
             ..default()
         }))
         .add_plugins(ocr::ocrs_plugin)
         .add_plugins(cap::ScreencastPlugin)
         .add_plugins(market::market_plugin)
         .add_plugins(input::input_plugin)
+        .add_plugins(config::config_plugin)
         .init_state::<AppState>()
         .add_sub_state::<PlatOverlayPhase>()
         .add_systems(Startup, setup)
@@ -59,86 +56,91 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: Commands, conf: Res<ConfigManager>) {
     commands.spawn(Camera2d);
     let border = Val::VMax(0.1);
     let size = Val::VMax(5.);
-    let rulers = commands
-        .spawn((
-            Node {
-                position_type: PositionType::Relative,
-                width: Val::Vw(100.),
-                height: Val::Vh(100.),
-                ..default()
+    if conf.show_corner_boxes > 0.0 {
+        let rulers = commands
+            .spawn((
+                Node {
+                    position_type: PositionType::Relative,
+                    width: Val::Vw(100.),
+                    height: Val::Vh(100.),
+                    ..default()
+                },
+                Visibility::Inherited,
+            ))
+            .with_children(|c| {
+                c.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        bottom: border,
+                        right: border,
+                        width: size,
+                        height: size,
+                        ..default()
+                    },
+                    Outline {
+                        width: border,
+                        offset: Val::ZERO,
+                        color: Color::WHITE,
+                    },
+                ));
+                c.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        bottom: border,
+                        left: border,
+                        width: size,
+                        height: size,
+                        ..default()
+                    },
+                    Outline {
+                        width: border,
+                        offset: Val::ZERO,
+                        color: Color::WHITE,
+                    },
+                ));
+                c.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        top: border,
+                        right: border,
+                        width: size,
+                        height: size,
+                        ..default()
+                    },
+                    Outline {
+                        width: border,
+                        offset: Val::ZERO,
+                        color: Color::WHITE,
+                    },
+                ));
+                c.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        top: border,
+                        left: border,
+                        width: size,
+                        height: size,
+                        ..default()
+                    },
+                    Outline {
+                        width: border,
+                        offset: Val::ZERO,
+                        color: Color::WHITE,
+                    },
+                ));
+            })
+            .id();
+        commands.delayed(
+            Duration::from_secs_f32(conf.show_corner_boxes),
+            move |mut c| {
+                c.entity(rulers).despawn();
             },
-            Visibility::Inherited,
-        ))
-        .with_children(|c| {
-            c.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    bottom: border,
-                    right: border,
-                    width: size,
-                    height: size,
-                    ..default()
-                },
-                Outline {
-                    width: border,
-                    offset: Val::ZERO,
-                    color: Color::WHITE,
-                },
-            ));
-            c.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    bottom: border,
-                    left: border,
-                    width: size,
-                    height: size,
-                    ..default()
-                },
-                Outline {
-                    width: border,
-                    offset: Val::ZERO,
-                    color: Color::WHITE,
-                },
-            ));
-            c.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: border,
-                    right: border,
-                    width: size,
-                    height: size,
-                    ..default()
-                },
-                Outline {
-                    width: border,
-                    offset: Val::ZERO,
-                    color: Color::WHITE,
-                },
-            ));
-            c.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: border,
-                    left: border,
-                    width: size,
-                    height: size,
-                    ..default()
-                },
-                Outline {
-                    width: border,
-                    offset: Val::ZERO,
-                    color: Color::WHITE,
-                },
-            ));
-        })
-        .id();
-    commands.delayed(Duration::from_secs(5), move |mut c| {
-        c.entity(rulers).despawn();
-    });
+        );
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq, Hash, States)]
@@ -156,9 +158,9 @@ pub enum PlatOverlayPhase {
     Displaying,
 }
 
-fn keybinds(kb: Res<ButtonInput<KeyCode>>, mut commands: Commands) {
+fn keybinds(kb: Res<ButtonInput<KeyCode>>, conf: Res<ConfigManager>, mut commands: Commands) {
     // see input.rs for why KeyI works but nothing else will
-    if kb.just_pressed(KeyCode::KeyI) {
+    if kb.just_pressed(conf.overlay_key) {
         println!("Start capture");
         commands.set_state(AppState::PlatOverlay);
         commands.set_state(PlatOverlayPhase::Ocr);
@@ -196,7 +198,6 @@ impl<C: FnOnce(Commands) + Send + Sync + 'static> Command for DelayedCommands<C>
             Timer::new(self.delay, TimerMode::Once),
             command_queue,
         ));
-        println!("spawned delayed command queue");
     }
 }
 
@@ -210,8 +211,8 @@ fn command_after(
 ) {
     for (e, mut cmd) in cmds {
         if cmd.0.tick(time.delta()).just_finished() {
-            commands.append(&mut cmd.1);
             commands.entity(e).despawn();
+            commands.append(&mut cmd.1);
         }
     }
 }
@@ -221,8 +222,10 @@ pub struct ShouldDisplay;
 
 fn display_plat(
     evt: On<Insert, ItemData>,
-    q: Query<(&ItemData, &Slug), With<ShouldDisplay>>,
-    main_state: Res<State<AppState>>,
+    cont: Query<&ItemsContainer>,
+    q: Query<(&ItemData, &Slug, &ChildOf), With<ShouldDisplay>>,
+    conf: Res<ConfigManager>,
+    // main_state: Res<State<AppState>>,
     maybe_state: Option<Res<State<PlatOverlayPhase>>>,
     mut commands: Commands,
 ) {
@@ -230,13 +233,20 @@ fn display_plat(
         && let PlatOverlayPhase::Ocr = state.get()
     {
         commands.set_state(PlatOverlayPhase::Displaying);
-        commands.delayed(Duration::from_secs_f32(14.5), |mut c| {
+        commands.delayed(Duration::from_secs_f32(conf.close_layout_after), |mut c| {
             c.set_state(AppState::Waiting)
         });
     }
-    if let Ok((data, slug)) = q.get(evt.entity) {
+
+    if let Ok((data, slug, child_of)) = q.get(evt.entity) {
+        let mut scale = 0.5;
+        if let Ok(container) = cont.get(child_of.parent()) {
+            let width = container.0.half_size().x * 2.;
+            scale = 2000. / width;
+        }
+
         commands.entity(evt.entity).with_child((
-            Transform::from_xyz(150., -10., 0.),
+            Transform::from_xyz(150. * scale, -10. * scale, 0.),
             Text2d(format!(
                 "Avg: {}\nMin: {}\nMax: {}\nDucats: {}\n{}",
                 data.avg,
@@ -247,10 +257,10 @@ fn display_plat(
                     .map_or("-".to_string(), ToString::to_string),
                 slug.0
             )),
-            TextFont::from_font_size(24.),
+            TextFont::from_font_size(conf.font_size),
             Anchor::TOP_CENTER,
             Text2dShadow {
-                offset: Vec2::new(2.0, -2.0),
+                offset: Vec2::new(1. + scale, -(1. + scale)),
                 color: Color::BLACK,
             },
             DespawnOnExit(PlatOverlayPhase::Displaying),

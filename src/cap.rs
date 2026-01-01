@@ -117,14 +117,14 @@ fn setup_screencast(session_res: Res<ScreencastSession>, mut commands: Commands)
             s.save_to_disk();
             let pipewire_node_id = stream.pipe_wire_node_id();
 
-            println!(
+            trace!(
                 "node id {}, fd {}",
                 pipewire_node_id,
                 &fd.try_clone().unwrap().into_raw_fd()
             );
 
             if let Err(e) = start_streaming(pipewire_node_id, fd, send, send_m).await {
-                eprintln!("Error: {}", e);
+                error!("Error: {}", e);
             };
         })
         .detach();
@@ -192,7 +192,7 @@ async fn start_streaming(
     let _listener = stream
         .add_local_listener_with_user_data(data)
         .state_changed(|_, _, old, new| {
-            println!("State changed: {:?} -> {:?}", old, new);
+            trace!("State changed: {:?} -> {:?}", old, new);
         })
         .param_changed(move |_, user_data, id, param| {
             let Some(param) = param else {
@@ -219,22 +219,22 @@ async fn start_streaming(
                 .parse(param)
                 .expect("Failed to parse param changed to VideoInfoRaw");
 
-            println!("got video format:");
-            println!(
-                "\tformat: {} ({:?})",
-                user_data.format.format().as_raw(),
-                user_data.format.format()
-            );
-            println!(
-                "\tsize: {}x{}",
-                user_data.format.size().width,
-                user_data.format.size().height
-            );
-            println!(
-                "\tframerate: {}/{}",
-                user_data.format.framerate().num,
-                user_data.format.framerate().denom
-            );
+            // println!("got video format:");
+            // println!(
+            //     "\tformat: {} ({:?})",
+            //     user_data.format.format().as_raw(),
+            //     user_data.format.format()
+            // );
+            // println!(
+            //     "\tsize: {}x{}",
+            //     user_data.format.size().width,
+            //     user_data.format.size().height
+            // );
+            // println!(
+            //     "\tframerate: {}/{}",
+            //     user_data.format.framerate().num,
+            //     user_data.format.framerate().denom
+            // );
             let format = match user_data.format.format() {
                 spa::param::video::VideoFormat::BGRA => VideoFormat::Bgra,
                 spa::param::video::VideoFormat::RGBA => VideoFormat::Rgba,
@@ -256,7 +256,7 @@ async fn start_streaming(
         })
         .process(move |stream, _| {
             match stream.dequeue_buffer() {
-                None => println!("out of buffers"),
+                None => trace!("out of buffers"),
                 Some(mut buffer) => {
                     let datas = buffer.datas_mut();
                     if datas.is_empty() {
@@ -275,7 +275,7 @@ async fn start_streaming(
         })
         .register()?;
 
-    println!("Created stream {:#?}", stream);
+    // println!("Created stream {:#?}", stream);
 
     let obj = pw::spa::pod::object!(
         pw::spa::utils::SpaTypes::ObjectParamFormat,
@@ -349,7 +349,7 @@ async fn start_streaming(
         &mut params,
     )?;
 
-    println!("Connected stream");
+    trace!("Connected stream");
 
     mainloop.run();
 

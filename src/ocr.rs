@@ -14,7 +14,11 @@ use bevy::{
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams, TextItem};
 use rten::Model;
 
-use crate::{PlatOverlayPhase, ShouldDisplay, cap::LatestImage};
+use crate::{
+    PlatOverlayPhase, ShouldDisplay,
+    cap::LatestImage,
+    config::{ConfigManager, Layout},
+};
 
 fn file_path(path: &str) -> PathBuf {
     let mut abs_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -103,10 +107,6 @@ impl OcrResults {
     }
 }
 
-const OFFSET: UVec2 = UVec2::new(478, 411);
-const SIZE: UVec2 = UVec2::new(965, 49);
-const ASSUMING: UVec2 = UVec2::new(1920, 1080);
-
 pub fn detect_columns(words: &[Word], gap_threshold: f32) -> Vec<Item> {
     if words.is_empty() {
         return Vec::new();
@@ -136,7 +136,7 @@ pub fn detect_columns(words: &[Word], gap_threshold: f32) -> Vec<Item> {
     // Merge column words into a Item
     columns
         .into_iter()
-        .filter_map(|mut col| {
+        .filter_map(|col| {
             if col.is_empty() {
                 return None;
             }
@@ -156,23 +156,34 @@ pub fn detect_columns(words: &[Word], gap_threshold: f32) -> Vec<Item> {
         })
         .collect()
 }
+impl Layout {
+    fn get_ocr_bounds(&self, img_size: (u32, u32)) -> URect {
+        let actual = UVec2::from(img_size);
+        let factor = actual / self.reference_resolution;
+        let offset = self.offset * factor;
+        let size = self.size * factor;
 
-fn detect_once(engine: Engine, img: image::RgbaImage) -> Result<OcrResults> {
-    let actual = UVec2::from(img.dimensions());
-    let factor = actual / ASSUMING;
-    let offset = OFFSET * factor;
-    let size = SIZE * factor;
+        URect {
+            min: offset,
+            max: (offset + size),
+        }
+    }
+}
 
-    let detect_aabb = Aabb2d {
-        min: offset.as_vec2() - 1.,
-        max: (offset + size).as_vec2() + 1.,
-    };
+fn detect_once(engine: Engine, img: image::RgbaImage, ocr_bounds: URect) -> Result<OcrResults> {
     // if size.x > 600 {
     //     size.y = (size.y / size.x) * 600;
     //     size.x = 600;
     //     let mut dst_image = image::DynamicImage::new(size.x, size.y, subimg.color);
     // }
-    let subimg = image::imageops::crop_imm(&img, offset.x, offset.y, size.x, size.y).to_image();
+    let subimg = image::imageops::crop_imm(
+        &img,
+        ocr_bounds.min.x,
+        ocr_bounds.min.y,
+        ocr_bounds.width(),
+        ocr_bounds.height(),
+    )
+    .to_image();
     if subimg.dimensions().0 == 0 || subimg.dimensions().1 == 0 {
         return Err(anyhow!("Image dimensions are 0 in one direction").into());
     }
@@ -213,7 +224,7 @@ fn detect_once(engine: Engine, img: image::RgbaImage) -> Result<OcrResults> {
             &line
                 .bounding_rect()
                 .corners()
-                .map(|i| Vec2::new(i.x as f32, i.y as f32) + offset.as_vec2()),
+                .map(|i| Vec2::new(i.x as f32, i.y as f32) + ocr_bounds.min.as_vec2()),
         );
         let first_index = words.len();
 
@@ -223,7 +234,7 @@ fn detect_once(engine: Engine, img: image::RgbaImage) -> Result<OcrResults> {
                 &text_word
                     .rotated_rect()
                     .corners()
-                    .map(|i| Vec2::new(i.x, i.y) + offset.as_vec2()),
+                    .map(|i| Vec2::new(i.x, i.y) + ocr_bounds.min.as_vec2()),
             );
             words.push(Word {
                 text: text_word.to_string(),
@@ -237,15 +248,15 @@ fn detect_once(engine: Engine, img: image::RgbaImage) -> Result<OcrResults> {
     }
     let items = detect_columns(&words, 15.);
     Ok(OcrResults {
-        detect_aabb,
+        detect_aabb: {
+            let Rect { min, max } = ocr_bounds.as_rect();
+            Aabb2d { min, max }
+        },
         words,
         lines,
         items,
     })
 }
-
-#[derive(Event)]
-pub struct StartOcr;
 
 #[derive(Resource, Default)]
 struct OcrTask(Option<Task<Result<OcrResults>>>);
@@ -253,6 +264,7 @@ struct OcrTask(Option<Task<Result<OcrResults>>>);
 fn start_ocr_task(
     mut img: ResMut<LatestImage>,
     engine: Res<Engine>,
+    conf: Res<ConfigManager>,
     mut current_task: ResMut<OcrTask>,
     mut items: Single<&mut ItemsContainer>,
 ) {
@@ -260,10 +272,15 @@ fn start_ocr_task(
         && let Some(img) = img.get_latest_rgba()
     {
         let engine = engine.clone();
+        let Some(layout) = conf.find_matching_layout(&img) else {
+            warn!("Could not detect layout for capture");
+            return;
+        };
+        let ocr_bounds = layout.get_ocr_bounds(img.dimensions());
         current_task.0 = Some(AsyncComputeTaskPool::get().spawn(async move {
             let start = Instant::now();
-            let res = detect_once(engine, img);
-            dbg!(start.elapsed().as_millis());
+            let res = detect_once(engine, img, ocr_bounds);
+            debug!("OCR took {}ms", start.elapsed().as_millis());
             res
         }));
         items.1 = Color::linear_rgb(0.1, 0.9, 0.1);
