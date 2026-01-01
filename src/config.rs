@@ -188,6 +188,7 @@ pub struct Config {
     pub refresh_market_after: u64,
     pub show_corner_boxes: f32,
     pub font_size: f32,
+    pub show_keys: bool,
     pub layouts: Vec<LayoutOption>,
 }
 impl Default for Config {
@@ -199,6 +200,7 @@ impl Default for Config {
             refresh_market_after: 60 * 60 * 24 * 2, // 2 days
             show_corner_boxes: 5.,
             font_size: 18.0,
+            show_keys: false,
             layouts: vec![LayoutOption {
                 aspect_ratio: [16, 9],
                 pixel_checks: vec![],

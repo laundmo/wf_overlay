@@ -159,7 +159,10 @@ pub enum PlatOverlayPhase {
 }
 
 fn keybinds(kb: Res<ButtonInput<KeyCode>>, conf: Res<ConfigManager>, mut commands: Commands) {
-    // see input.rs for why KeyI works but nothing else will
+    if conf.show_keys {
+        kb.get_just_pressed()
+            .for_each(|key| info!("Key event: {key:?}"));
+    }
     if kb.just_pressed(conf.overlay_key) {
         println!("Start capture");
         commands.set_state(AppState::PlatOverlay);

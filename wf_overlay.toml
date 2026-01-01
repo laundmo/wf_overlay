@@ -18,6 +18,9 @@ show_corner_boxes = 5.0
 # main font size for the overlay
 font_size = 18.0
 
+# show keystrokes in console
+show_keys = false
+
 [[layouts]]
 # aspect ratio to which this applies
 aspect_ratio = "16:9"
