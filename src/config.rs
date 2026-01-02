@@ -178,6 +178,18 @@ pub struct Layout {
     pub offset: UVec2,
     pub size: UVec2,
     pub reference_resolution: UVec2,
+    #[serde(
+        serialize_with = "serialize_color",
+        deserialize_with = "deserialize_color"
+    )]
+    pub theme_text_color: Srgba,
+}
+fn serialize_color<S: Serializer>(color: &Srgba, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(&color.to_hex())
+}
+fn deserialize_color<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Srgba, D::Error> {
+    let s = String::deserialize(deserializer)?;
+    Srgba::hex(s).map_err(|e| serde::de::Error::custom(e.to_string()))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,7 +208,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             overlay: true,
-            overlay_key: KeyCode::KeyI,
+            overlay_key: KeyCode::Equal,
             close_layout_after: 14.5,
             refresh_market_after: 60 * 60 * 24 * 2, // 2 days
             show_corner_boxes: 5.,
@@ -210,6 +222,7 @@ impl Default for Config {
                     offset: UVec2::new(478, 411),
                     size: UVec2::new(965, 49),
                     reference_resolution: UVec2::new(1920, 1080),
+                    theme_text_color: Srgba::hex("#bea966").unwrap(), // vitruvian
                 },
             }],
         }

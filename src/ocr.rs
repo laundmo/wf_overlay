@@ -11,6 +11,7 @@ use bevy::{
     prelude::*,
     tasks::{AsyncComputeTaskPool, Task, block_on, futures_lite::future},
 };
+use image::{GrayImage, Luma, Rgba};
 use jiff::fmt::temporal::DateTimePrinter;
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams, TextItem};
 use rten::Model;
@@ -170,8 +171,20 @@ impl Layout {
         }
     }
 }
+#[inline]
+fn color_distance_fast(c1: &[u8; 4], c2: &[u8; 4]) -> f32 {
+    let dr = (c1[0] as f32 - c2[0] as f32).abs() * 0.299;
+    let dg = (c1[1] as f32 - c2[1] as f32).abs() * 0.587;
+    let db = (c1[2] as f32 - c2[2] as f32).abs() * 0.114;
+    dr + dg + db
+}
 
-fn detect_once(engine: Engine, img: image::RgbaImage, ocr_bounds: URect) -> Result<OcrResults> {
+fn detect_once(
+    engine: Engine,
+    img: image::RgbaImage,
+    ocr_bounds: URect,
+    text_color: [u8; 4],
+) -> Result<OcrResults> {
     let processed = image::imageops::crop_imm(
         &img,
         ocr_bounds.min.x,
@@ -184,16 +197,29 @@ fn detect_once(engine: Engine, img: image::RgbaImage, ocr_bounds: URect) -> Resu
         return Err(anyhow!("Image dimensions are 0 in one direction").into());
     }
     // image::imageops::invert(&mut subimg);
-    let mut processed = image::imageops::unsharpen(&processed, 20.0, 15);
-    image::imageops::colorops::contrast_in_place(&mut processed, 20.);
-    let processed = image::imageops::fast_blur(&processed, 1.);
-    let mut processed = image::imageops::unsharpen(&processed, 5.0, 15);
-    image::imageops::invert(&mut processed);
-    image::imageops::colorops::brighten_in_place(&mut processed, -30);
-    image::imageops::colorops::contrast_in_place(&mut processed, 20.);
-    // processed.save("unsharpened.png").unwrap();
 
-    let img_source = ImageSource::from_bytes(processed.as_raw(), processed.dimensions())?;
+    let (width, height) = processed.dimensions();
+    let mut output = GrayImage::new(width, height);
+
+    for (x, y, pixel) in processed.enumerate_pixels() {
+        let dist_to_text = color_distance_fast(&pixel.0, &text_color);
+        let bg_dist = color_distance_fast(&pixel.0, &[50, 50, 50, 255]);
+
+        let ratio = if dist_to_text + bg_dist > 0.01 {
+            bg_dist / (dist_to_text + bg_dist)
+        } else {
+            0.5
+        };
+
+        let gray = (ratio * 255.0) as u8;
+        output.put_pixel(x, y, Luma([gray]));
+    }
+    image::imageops::invert(&mut output);
+    let output = image::imageops::fast_blur(&output, 0.5);
+    let output = image::imageops::unsharpen(&output, 2.0, 0);
+    // output.save("processed.png").unwrap();
+
+    let img_source = ImageSource::from_bytes(output.as_raw(), output.dimensions())?;
 
     // use a block to only lock engine for as little time as possible
     let ocr_engine = engine.0.lock().expect("non-poisoned lock");
@@ -278,9 +304,10 @@ fn start_ocr_task(
             return;
         };
         let ocr_bounds = layout.get_ocr_bounds(img.dimensions());
+        let text_color = layout.theme_text_color.to_u8_array();
         current_task.0 = Some(AsyncComputeTaskPool::get().spawn(async move {
             let start = Instant::now();
-            let res = detect_once(engine.clone(), img.clone(), ocr_bounds);
+            let res = detect_once(engine.clone(), img.clone(), ocr_bounds, text_color);
             debug!("OCR took {}ms", start.elapsed().as_millis());
             res
         }));
