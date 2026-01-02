@@ -11,6 +11,7 @@ use bevy::{
     prelude::*,
     tasks::{AsyncComputeTaskPool, Task, block_on, futures_lite::future},
 };
+use jiff::fmt::temporal::DateTimePrinter;
 use ocrs::{ImageSource, OcrEngine, OcrEngineParams, TextItem};
 use rten::Model;
 
@@ -171,12 +172,7 @@ impl Layout {
 }
 
 fn detect_once(engine: Engine, img: image::RgbaImage, ocr_bounds: URect) -> Result<OcrResults> {
-    // if size.x > 600 {
-    //     size.y = (size.y / size.x) * 600;
-    //     size.x = 600;
-    //     let mut dst_image = image::DynamicImage::new(size.x, size.y, subimg.color);
-    // }
-    let subimg = image::imageops::crop_imm(
+    let processed = image::imageops::crop_imm(
         &img,
         ocr_bounds.min.x,
         ocr_bounds.min.y,
@@ -184,25 +180,20 @@ fn detect_once(engine: Engine, img: image::RgbaImage, ocr_bounds: URect) -> Resu
         ocr_bounds.height(),
     )
     .to_image();
-    if subimg.dimensions().0 == 0 || subimg.dimensions().1 == 0 {
+    if processed.dimensions().0 == 0 || processed.dimensions().1 == 0 {
         return Err(anyhow!("Image dimensions are 0 in one direction").into());
     }
+    // image::imageops::invert(&mut subimg);
+    let mut processed = image::imageops::unsharpen(&processed, 20.0, 15);
+    image::imageops::colorops::contrast_in_place(&mut processed, 20.);
+    let processed = image::imageops::fast_blur(&processed, 1.);
+    let mut processed = image::imageops::unsharpen(&processed, 5.0, 15);
+    image::imageops::invert(&mut processed);
+    image::imageops::colorops::brighten_in_place(&mut processed, -30);
+    image::imageops::colorops::contrast_in_place(&mut processed, 20.);
+    // processed.save("unsharpened.png").unwrap();
 
-    // let mut resizer = engine.1.lock().expect("non-poisoned lock");
-    // let subimg = DynamicImage::ImageRgba8(subimg);
-    // let mut dest_subimg = subimg.clone();
-
-    // resizer
-    //     .resize(
-    //         &subimg,
-    //         &mut dest_subimg,
-    //         &ResizeOptions::new()
-    //             .use_alpha(false)
-    //             .resize_alg(fast_image_resize::ResizeAlg::Nearest),
-    //     )
-    //     .unwrap();
-    // let subimg = dest_subimg.as_rgba8().unwrap();
-    let img_source = ImageSource::from_bytes(subimg.as_raw(), subimg.dimensions())?;
+    let img_source = ImageSource::from_bytes(processed.as_raw(), processed.dimensions())?;
 
     // use a block to only lock engine for as little time as possible
     let ocr_engine = engine.0.lock().expect("non-poisoned lock");
@@ -260,6 +251,7 @@ fn detect_once(engine: Engine, img: image::RgbaImage, ocr_bounds: URect) -> Resu
 
 #[derive(Resource, Default)]
 struct OcrTask(Option<Task<Result<OcrResults>>>);
+const PRINTER: DateTimePrinter = DateTimePrinter::new().separator(b'_').precision(Some(0));
 
 fn start_ocr_task(
     mut img: ResMut<LatestImage>,
@@ -272,6 +264,15 @@ fn start_ocr_task(
         && let Some(img) = img.get_latest_rgba()
     {
         let engine = engine.clone();
+        if conf.save_to_disk {
+            std::fs::create_dir_all("images").unwrap();
+            let ts = PRINTER
+                .timestamp_to_string(&jiff::Timestamp::now())
+                .replace(":", "_");
+            if let Err(e) = img.save(format!("images/{ts}.png")) {
+                error!("Could not save screenshot: {e}");
+            };
+        }
         let Some(layout) = conf.find_matching_layout(&img) else {
             warn!("Could not detect layout for capture");
             return;
@@ -279,7 +280,7 @@ fn start_ocr_task(
         let ocr_bounds = layout.get_ocr_bounds(img.dimensions());
         current_task.0 = Some(AsyncComputeTaskPool::get().spawn(async move {
             let start = Instant::now();
-            let res = detect_once(engine, img, ocr_bounds);
+            let res = detect_once(engine.clone(), img.clone(), ocr_bounds);
             debug!("OCR took {}ms", start.elapsed().as_millis());
             res
         }));

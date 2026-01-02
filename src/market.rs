@@ -5,13 +5,17 @@ use std::{
     time::Duration,
 };
 
-use bevy::{platform::collections::HashMap, prelude::*, time::common_conditions::on_real_timer};
+use bevy::{
+    platform::collections::HashMap, prelude::*, state::commands,
+    time::common_conditions::on_real_timer,
+};
 use bevy_mod_req::{ReqError, ReqPlugin, ReqRequest, ReqResponse, req_type_plugin};
 use serde::{Deserialize, Deserializer, Serialize};
 use simsearch::{SearchOptions, SimSearch};
 use ureq::config::IpFamily;
 
 use crate::{
+    DelayedCommandsExt,
     market_api::{ItemsRoot, TopOrdersRoot},
     ocr::{self, ItemsContainer},
 };
@@ -232,8 +236,16 @@ impl DataManager {
         self.ordered.insert(next_free, k);
     }
 
-    fn get_oldest(&self) -> Option<(&u64, &String)> {
-        self.ordered.first_key_value()
+    fn get_oldest(&self) -> Option<&String> {
+        if let Some((age, key)) = self.ordered.first_key_value() {
+            if age + MAX_AGE < unix_now() {
+                None
+            } else {
+                Some(key)
+            }
+        } else {
+            None
+        }
     }
 
     fn get_ducats(&self, k: &String) -> Option<u32> {
@@ -278,9 +290,8 @@ struct RemoveOnStore;
 fn fetch_oldest(data: Res<DataManager>, mut commands: Commands, q: Query<&WantsFetch>) {
     // first == smallest == oldest
     if q.is_empty()
-        && let Some((age, k)) = data.get_oldest()
+        && let Some(k) = data.get_oldest()
     {
-        info!("Item: {k} is oldest at -{}s behind", unix_now() - age);
         commands.spawn((Slug(k.clone()), WantsFetch, RemoveOnStore));
     }
 }

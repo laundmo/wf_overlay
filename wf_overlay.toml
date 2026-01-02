@@ -4,7 +4,7 @@
 overlay = true
 
 # raw inputs, before layout. approx US-layout. ex.: KeyA, KeyB, Delete, AltLeft
-overlay_key = "KeyI"
+overlay_key = "Equal"
 
 # Delay for closing the overlay, in seconds
 close_layout_after = 14.5
@@ -16,10 +16,13 @@ refresh_market_after = 172800
 show_corner_boxes = 5.0
 
 # main font size for the overlay
-font_size = 18.0
+font_size = 24.0
 
 # show keystrokes in console
 show_keys = false
+
+# Whether to save the frames when the keybind was hit to the disk
+save_to_disk = true
 
 [[layouts]]
 # aspect ratio to which this applies

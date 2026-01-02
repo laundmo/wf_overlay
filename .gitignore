@@ -5,3 +5,4 @@
 .cargo/config.toml
 *.json
 screen_session.txt
+images/

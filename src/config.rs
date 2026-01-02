@@ -189,6 +189,7 @@ pub struct Config {
     pub show_corner_boxes: f32,
     pub font_size: f32,
     pub show_keys: bool,
+    pub save_to_disk: bool,
     pub layouts: Vec<LayoutOption>,
 }
 impl Default for Config {
@@ -201,6 +202,7 @@ impl Default for Config {
             show_corner_boxes: 5.,
             font_size: 18.0,
             show_keys: false,
+            save_to_disk: false,
             layouts: vec![LayoutOption {
                 aspect_ratio: [16, 9],
                 pixel_checks: vec![],
