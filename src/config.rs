@@ -183,6 +183,7 @@ pub struct Layout {
         deserialize_with = "deserialize_color"
     )]
     pub theme_text_color: Srgba,
+    pub item_name_distance: u32,
 }
 fn serialize_color<S: Serializer>(color: &Srgba, serializer: S) -> Result<S::Ok, S::Error> {
     serializer.serialize_str(&color.to_hex())
@@ -223,6 +224,7 @@ impl Default for Config {
                     size: UVec2::new(965, 49),
                     reference_resolution: UVec2::new(1920, 1080),
                     theme_text_color: Srgba::hex("#bea966").unwrap(), // vitruvian
+                    item_name_distance: 90,
                 },
             }],
         }

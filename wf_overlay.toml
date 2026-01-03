@@ -37,4 +37,6 @@ size = [965, 48]
 # resolution at which the above values apply
 reference_resolution = [1920, 1080]
 # vitruvian: #bea966
-theme_text_color = "#9a1f22" # stalker
+theme_text_color = "#9A1F22" # stalker
+# Distance between item names in pixels, should be larger than distance between words
+item_name_distance = 45

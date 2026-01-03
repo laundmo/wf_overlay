@@ -159,9 +159,14 @@ pub fn detect_columns(words: &[Word], gap_threshold: f32) -> Vec<Item> {
         .collect()
 }
 impl Layout {
+    fn get_scale_factor(&self, img_size: (u32, u32)) -> UVec2 {
+        UVec2::from(img_size) / self.reference_resolution
+    }
+    fn get_scaled_item_name_distance(&self, img_size: (u32, u32)) -> f32 {
+        (self.item_name_distance * self.get_scale_factor(img_size).x) as f32
+    }
     fn get_ocr_bounds(&self, img_size: (u32, u32)) -> URect {
-        let actual = UVec2::from(img_size);
-        let factor = actual / self.reference_resolution;
+        let factor = self.get_scale_factor(img_size);
         let offset = self.offset * factor;
         let size = self.size * factor;
 
@@ -179,12 +184,9 @@ fn color_distance_fast(c1: &[u8; 4], c2: &[u8; 4]) -> f32 {
     dr + dg + db
 }
 
-fn detect_once(
-    engine: Engine,
-    img: image::RgbaImage,
-    ocr_bounds: URect,
-    text_color: [u8; 4],
-) -> Result<OcrResults> {
+fn detect_once(engine: Engine, img: image::RgbaImage, layout: Layout) -> Result<OcrResults> {
+    let ocr_bounds = layout.get_ocr_bounds(img.dimensions());
+    let text_color = layout.theme_text_color.to_u8_array();
     let processed = image::imageops::crop_imm(
         &img,
         ocr_bounds.min.x,
@@ -263,7 +265,10 @@ fn detect_once(
             word_range: first_index..words.len(),
         });
     }
-    let items = detect_columns(&words, 15.);
+    let items = detect_columns(
+        &words,
+        layout.get_scaled_item_name_distance(img.dimensions()),
+    );
     Ok(OcrResults {
         detect_aabb: {
             let Rect { min, max } = ocr_bounds.as_rect();
@@ -303,11 +308,10 @@ fn start_ocr_task(
             warn!("Could not detect layout for capture");
             return;
         };
-        let ocr_bounds = layout.get_ocr_bounds(img.dimensions());
-        let text_color = layout.theme_text_color.to_u8_array();
+        let layout = layout.clone();
         current_task.0 = Some(AsyncComputeTaskPool::get().spawn(async move {
             let start = Instant::now();
-            let res = detect_once(engine.clone(), img.clone(), ocr_bounds, text_color);
+            let res = detect_once(engine.clone(), img.clone(), layout);
             debug!("OCR took {}ms", start.elapsed().as_millis());
             res
         }));
