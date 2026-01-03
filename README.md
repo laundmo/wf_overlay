@@ -2,19 +2,18 @@
 
 Just shows reward prices right now, *extremely* early state. Only works on linux, probably only on wayland.
 
-Only tested on a 4k monitor, very possible it won't work on other resolutions (tho an attempt has been made).
-
 ## Setup
 
-1. Run this in `assets/` to download OCR models: [download_models.sh](https://github.com/robertknight/ocrs/blob/4d76906598bfb4f539fd12d554c9c402dfa78be3/ocrs/examples/download-models.sh)
-2. Make sure your user is in the `input` group.
+1. Check wf_overlay.toml for the settings like keybinds
+2. Run this in `assets/` (might need to create) to download OCR models: [download_models.sh](https://github.com/robertknight/ocrs/blob/4d76906598bfb4f539fd12d554c9c402dfa78be3/ocrs/examples/download-models.sh)
+3. Make sure your user is in the `input` group.
     1. For most distros, run `sudo usermod -a -G input $USER` and then reboot
-3. (Compile and) run wf_overlay
-4. Select main screen in the Desktop Portal
-5. Go ingame
-6. Hit I during a relic screen
+4. (Compile and) run wf_overlay
+5. Configure you Desktop Environment of choice so that wf_overlay is always on top (on KDE, set "layer" to Overlay using Window Rules)
+6. Select main screen in the Desktop Portal
+7. Go ingame
+8. Hit the configured keybind during a relic screen
 
-On KDE, i've had to set a window rule to force it to the Overlay layer, YMMV.
 
 ## What it does
 
